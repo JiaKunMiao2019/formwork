@@ -27,13 +27,13 @@ public class IoUtils {
         if (!file.exists()){// 如果D:/DocumentProcessingCenter/DocumentCopyCenter不存在，就创建为目录
             file.mkdirs();
         }
-
+        System.out.println(file.getName());
         // 创建以dir1为父目录,名为"dir2"文件夹的File对象
         File file1 = new File(file, "DocumentCopyCenter");
         if (!file1.exists()){
             file1.mkdir();
         }
-
+        System.out.println(file1.getParent());
         //创建file1为父目录，名为file2文件的file对象
         File file2 = new File(file1, "copyLog.txt");
         if (!file2.exists()){
@@ -43,7 +43,8 @@ public class IoUtils {
                 e.printStackTrace();
             }
         }
-
+        System.out.println(file2.getAbsolutePath());
+        System.out.println(file2.length());
     }
 
 }
