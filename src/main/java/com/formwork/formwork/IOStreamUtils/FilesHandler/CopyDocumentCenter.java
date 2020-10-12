@@ -10,12 +10,21 @@
  */
 package com.formwork.formwork.IOStreamUtils.FilesHandler;
 
+import com.formwork.formwork.DepandentCommon.ConstantCommon;
 import com.formwork.formwork.ExceptionCommon.ExceptionCommon;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.multipart.MultipartHttpServletRequest;
 
+import javax.servlet.http.HttpServletRequest;
 import java.io.*;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 /**
  * 〈文件复制中心〉
@@ -26,8 +35,85 @@ import java.util.Map;
  */
 @Service
 public class CopyDocumentCenter {
+    static final List<String> FORM_DATE = Arrays.asList("测试一","测试二");
+    /**文件的上传处理（Excel-模板类的）*/
+    public void upLoadExcel(HttpServletRequest request) throws Exception {
+        String suffix = null;
+        // 转型为MultipartHttpRequest
+        MultipartHttpServletRequest multipartRequest = (MultipartHttpServletRequest) request;
+        //获得文件
+        MultipartFile file = multipartRequest.getFile("file");
+        if (file == null){
+            throw new ExceptionCommon("上传的文件为空，请重新上传");
+        }
+        //获得文件名，格式校验
+        String fileName = file.getOriginalFilename();
+        if (!StringUtils.isEmpty(file.getOriginalFilename()) && !StringUtils.isEmpty(fileName)){
+            suffix = file.getOriginalFilename().substring(fileName.lastIndexOf("."), fileName.length());
+        }else {
+            throw new ExceptionCommon(ConstantCommon.FORMAT_EROR);
+        }
+        //进行excel的文件处理
+        Workbook workbook =null;
+        if (ConstantCommon.XLS.equals(suffix) || ConstantCommon.XLSX.equals(suffix)){
+            workbook = new HSSFWorkbook(file.getInputStream());
+        }else{
+            throw new ExceptionCommon(ConstantCommon.FORMAT_EROR);
+        }
+        doExcelRead(workbook);
+    }
 
-    //文件复制的最基础的框架
+    private void doExcelRead(Workbook workbook) throws Exception {
+        if (workbook.getNumberOfSheets() > 0){
+            Sheet sheet = workbook.getSheetAt(0);
+            Row tittle = sheet.getRow(0);
+            //校验tittle
+            doValidatFormatTittle(tittle);
+
+            //读取excel的每行的文字并返回数据
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {//先读行
+                Row row = sheet.getRow(i);
+                if (row == null){
+                    continue;
+                }
+                boolean isAllBlank = true;
+                for (int j = 0; j < 5; j++) {
+                    if (row.getCell(j) != null){
+                        row.getCell(j).setCellType(Cell.CELL_TYPE_STRING);
+                        if (!StringUtils.isEmpty(row.getCell(j).getStringCellValue())){
+                            isAllBlank = false;
+                        }
+                    }
+                }
+                if (isAllBlank){
+                    System.out.println("第"+i+"行为空");
+                    continue;
+                }
+                //读取每行的数据并进行数据库数据保存
+                String index1 = StringUtils.strip(Optional.ofNullable(row.getCell(0)).map(Cell::getStringCellValue).orElse(""));
+                String index2 = StringUtils.strip(Optional.ofNullable(row.getCell(1)).map(Cell::getStringCellValue).orElse(""));
+            }
+
+        }else {
+            throw new ExceptionCommon("xls文件的sheet数据丢失");
+        }
+    }
+
+    private void doValidatFormatTittle(Row tittle) throws Exception {
+        if (tittle !=null && (tittle.getLastCellNum() >= FORM_DATE.size())){
+            int lastCellNum = tittle.getLastCellNum();
+            for (int i = 0; i < lastCellNum; i++) {
+               String t = Optional.ofNullable(tittle.getCell(i)).map(Cell::getStringCellValue).orElse("");
+               if (i < FORM_DATE.size() && !FORM_DATE.get(i).equals(t)){
+                   throw new ExceptionCommon("模板不是最新模板，请下载最新的模板");
+               }
+            }
+        }else {
+            throw new ExceptionCommon("模板不是最新模板，请下载最新的模板");
+        }
+    }
+
+    /**文件复制的最基础的框架*/
     public void copyDocumentforPath(String oldPath,String copyPath) throws Exception {
         //新建输入输出流
         BufferedInputStream  in  = null;
