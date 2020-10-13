@@ -10,8 +10,11 @@
  */
 package com.formwork.formwork.IOStreamUtils.FilesHandler;
 
+import com.formwork.formwork.CommonDTO.PrintResp;
 import com.formwork.formwork.DepandentCommon.ConstantCommon;
 import com.formwork.formwork.ExceptionCommon.ExceptionCommon;
+import lombok.Cleanup;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.ss.usermodel.Cell;
@@ -22,7 +25,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
 
+import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import java.io.*;
 import java.util.*;
 
@@ -61,56 +66,6 @@ public class CopyDocumentCenter {
             throw new ExceptionCommon(ConstantCommon.FORMAT_EROR);
         }
         doExcelRead(workbook);
-    }
-
-    private void doExcelRead(Workbook workbook) throws Exception {
-        if (workbook.getNumberOfSheets() > 0){
-            Sheet sheet = workbook.getSheetAt(0);
-            Row tittle = sheet.getRow(0);
-            //校验tittle
-            doValidatFormatTittle(tittle);
-
-            //读取excel的每行的文字并返回数据
-            for (int i = 1; i <= sheet.getLastRowNum(); i++) {//先读行
-                Row row = sheet.getRow(i);
-                if (row == null){
-                    continue;
-                }
-                boolean isAllBlank = true;
-                for (int j = 0; j < 5; j++) {
-                    if (row.getCell(j) != null){
-                        row.getCell(j).setCellType(Cell.CELL_TYPE_STRING);
-                        if (!StringUtils.isEmpty(row.getCell(j).getStringCellValue())){
-                            isAllBlank = false;
-                        }
-                    }
-                }
-                if (isAllBlank){
-                    System.out.println("第"+i+"行为空");
-                    continue;
-                }
-                //读取每行的数据并进行数据库数据保存
-                String index1 = StringUtils.strip(Optional.ofNullable(row.getCell(0)).map(Cell::getStringCellValue).orElse(""));
-                String index2 = StringUtils.strip(Optional.ofNullable(row.getCell(1)).map(Cell::getStringCellValue).orElse(""));
-            }
-
-        }else {
-            throw new ExceptionCommon("xls文件的sheet数据丢失");
-        }
-    }
-
-    private void doValidatFormatTittle(Row tittle) throws Exception {
-        if (tittle !=null && (tittle.getLastCellNum() >= FORM_DATE.size())){
-            int lastCellNum = tittle.getLastCellNum();
-            for (int i = 0; i < lastCellNum; i++) {
-               String t = Optional.ofNullable(tittle.getCell(i)).map(Cell::getStringCellValue).orElse("");
-               if (i < FORM_DATE.size() && !FORM_DATE.get(i).equals(t)){
-                   throw new ExceptionCommon("模板不是最新模板，请下载最新的模板");
-               }
-            }
-        }else {
-            throw new ExceptionCommon("模板不是最新模板，请下载最新的模板");
-        }
     }
 
     /**文件复制的最基础的框架*/
@@ -167,10 +122,52 @@ public class CopyDocumentCenter {
 
             }
         }
+    }
 
+    /**打印、预览图片类文件-方法一*/
+    public void printPicture(HttpServletResponse response) throws ExceptionCommon, IOException {
+        //查询保存图片位置的数据,暂时没有做
+        PrintResp printResp = new PrintResp();
 
+        //校验下返回的数据
+        if (ObjectUtils.isEmpty(printResp)){
+            throw new ExceptionCommon("没有查询到图片");
+        }
+        //判断返回的code是否为成功
+
+        //重新给文件命名
+        String fileName = ""+String.valueOf(System.currentTimeMillis())+"N"+"";
+
+        response.reset();
+        response.setContentType("application/pdf");
+        if (1 == 1){//预览
+            response.addHeader("Content-Disposition","inline");
+        }else {
+            response.addHeader("Content-Disposition","attachment:filename="+fileName+".pdf");
+        }
+
+        @Cleanup ServletOutputStream out = null;
+        try {
+            out = response.getOutputStream();
+            out.write(Base64.getDecoder().decode(printResp.getFileDate()));
+            response.flushBuffer();
+            out.flush();
+        }catch (Exception e){
+            throw new ExceptionCommon("讀取清單失敗");
+        }finally {
+            if (null != out){
+                out.close();
+            }
+        }
+    }
+
+    /**打印、预览图片类文件-方法二*/
+    public void printPictureToUpload(HttpServletResponse response) throws ExceptionCommon, IOException {
+        //根據條件直接查詢圖片的地址
 
     }
+
+
 
     /** 执行复制操作*/
     private void copyDocument(BufferedInputStream in,BufferedOutputStream out,File oldFile, File copyFile) throws IOException {
@@ -192,5 +189,56 @@ public class CopyDocumentCenter {
         map.put("in",in);
         map.put("out",out);
         return map;
+    }
+
+
+    private void doExcelRead(Workbook workbook) throws Exception {
+        if (workbook.getNumberOfSheets() > 0){
+            Sheet sheet = workbook.getSheetAt(0);
+            Row tittle = sheet.getRow(0);
+            //校验tittle
+            doValidatFormatTittle(tittle);
+
+            //读取excel的每行的文字并返回数据
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {//先读行
+                Row row = sheet.getRow(i);
+                if (row == null){
+                    continue;
+                }
+                boolean isAllBlank = true;
+                for (int j = 0; j < 5; j++) {
+                    if (row.getCell(j) != null){
+                        row.getCell(j).setCellType(Cell.CELL_TYPE_STRING);
+                        if (!StringUtils.isEmpty(row.getCell(j).getStringCellValue())){
+                            isAllBlank = false;
+                        }
+                    }
+                }
+                if (isAllBlank){
+                    System.out.println("第"+i+"行为空");
+                    continue;
+                }
+                //读取每行的数据并进行数据库数据保存
+                String index1 = StringUtils.strip(Optional.ofNullable(row.getCell(0)).map(Cell::getStringCellValue).orElse(""));
+                String index2 = StringUtils.strip(Optional.ofNullable(row.getCell(1)).map(Cell::getStringCellValue).orElse(""));
+            }
+
+        }else {
+            throw new ExceptionCommon("xls文件的sheet数据丢失");
+        }
+    }
+
+    private void doValidatFormatTittle(Row tittle) throws Exception {
+        if (tittle !=null && (tittle.getLastCellNum() >= FORM_DATE.size())){
+            int lastCellNum = tittle.getLastCellNum();
+            for (int i = 0; i < lastCellNum; i++) {
+                String t = Optional.ofNullable(tittle.getCell(i)).map(Cell::getStringCellValue).orElse("");
+                if (i < FORM_DATE.size() && !FORM_DATE.get(i).equals(t)){
+                    throw new ExceptionCommon("模板不是最新模板，请下载最新的模板");
+                }
+            }
+        }else {
+            throw new ExceptionCommon("模板不是最新模板，请下载最新的模板");
+        }
     }
 }
